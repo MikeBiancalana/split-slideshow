@@ -24,9 +24,13 @@ def run(config: Config) -> None:
     pygame.display.set_caption("split-slideshow")
 
     flags = 0
-    if config.fullscreen:
-        flags = pygame.FULLSCREEN | pygame.SCALED
     size = config.resolution or (0, 0)  # (0, 0) = native desktop resolution
+    if config.fullscreen:
+        flags = pygame.FULLSCREEN
+        # SCALED needs an explicit size; only useful when rendering at a fixed
+        # resolution scaled onto the display. With native res, plain FULLSCREEN.
+        if config.resolution is not None:
+            flags |= pygame.SCALED
     screen = pygame.display.set_mode(size, flags)
     width, height = screen.get_size()
     pygame.mouse.set_visible(False)
