@@ -1,0 +1,16 @@
+[Unit]
+Description=Four-panel slideshow kiosk
+After=graphical.target
+
+[Service]
+Type=simple
+User=pi
+Environment=DISPLAY=:0
+WorkingDirectory=/home/pi/split-slideshow
+ExecStartPre=/usr/bin/xset s off -dpms
+ExecStart=/usr/bin/uv run python -m split_slideshow /home/pi/split-slideshow/config.toml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=graphical.target
