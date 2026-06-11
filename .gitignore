@@ -1,4 +1,28 @@
+# Virtual environments
 .venv/
+venv/
+env/
+
+# Byte-compiled / caches
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Build / packaging artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Local config (copy from config.example.toml)
 config.toml
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
