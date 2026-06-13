@@ -10,6 +10,7 @@ from __future__ import annotations
 import queue
 import random
 import threading
+from collections import deque
 from pathlib import Path
 
 import pygame
@@ -25,14 +26,16 @@ class Panel:
         rect: pygame.Rect,
         background: tuple[int, int, int],
         rescan_every: int,
+        avoid_recent: int = 5,
     ) -> None:
         self.folder = folder
         self.rect = rect
         self.background = background
         self.rescan_every = max(1, rescan_every)
-        # images/last/flips_since_scan are only touched by the worker thread.
+        self.avoid_recent = max(0, avoid_recent)
+        # images/recent/flips_since_scan are only touched by the worker thread.
         self.images: list[Path] = []
-        self.last: Path | None = None
+        self.recent: deque[Path] = deque(maxlen=max(1, self.avoid_recent))
         self.flips_since_scan = 0
         self._font: pygame.font.Font | None = None
         # One-slot queue: the worker prepares exactly one frame ahead, then blocks
@@ -83,17 +86,23 @@ class Panel:
         self.flips_since_scan = 0
 
     def pick_next(self) -> Path | None:
-        """Choose the next image, avoiding an immediate repeat when possible."""
+        """Choose the next image, avoiding the most recently shown ones.
+
+        Avoids up to the last `avoid_recent` images, but never so many that no
+        candidate remains, so small folders still cycle.
+        """
         self.flips_since_scan += 1
         if self.flips_since_scan >= self.rescan_every:
             self.scan()
         if not self.images:
             return None
-        choices = self.images
-        if len(choices) > 1 and self.last is not None:
-            choices = [p for p in self.images if p != self.last] or self.images
-        self.last = random.choice(choices)
-        return self.last
+        # Cap the avoid-window at len-1 to guarantee at least one candidate.
+        k = min(self.avoid_recent, len(self.images) - 1)
+        avoid = set(list(self.recent)[-k:]) if k else set()
+        choices = [p for p in self.images if p not in avoid] or list(self.images)
+        pick = random.choice(choices)
+        self.recent.append(pick)
+        return pick
 
     def _prepare(self, path: Path) -> pygame.Surface | None:
         """Decode and scale an image to fit the cell. Returns None on any error.

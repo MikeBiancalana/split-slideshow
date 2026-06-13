@@ -39,7 +39,13 @@ def run(config: Config) -> None:
 
     rects = _grid_rects(width, height)
     panels = [
-        Panel(folder, rect, config.background, config.rescan_every)
+        Panel(
+            folder,
+            rect,
+            config.background,
+            config.rescan_every,
+            config.avoid_recent,
+        )
         for folder, rect in zip(config.folders, rects)
     ]
 

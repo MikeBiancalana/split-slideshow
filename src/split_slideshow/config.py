@@ -25,6 +25,7 @@ class Config:
     interval_seconds: float = 8.0
     stagger_seconds: float = 2.0
     rescan_every: int = 20  # re-scan a folder after this many flips
+    avoid_recent: int = 5  # don't repeat any of the last N images in a panel
 
 
 def load_config(path: str | Path) -> Config:
@@ -65,4 +66,5 @@ def load_config(path: str | Path) -> Config:
         interval_seconds=float(slideshow.get("interval_seconds", 8.0)),
         stagger_seconds=float(slideshow.get("stagger_seconds", 2.0)),
         rescan_every=int(slideshow.get("rescan_every", 20)),
+        avoid_recent=int(slideshow.get("avoid_recent", 5)),
     )

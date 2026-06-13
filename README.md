@@ -49,6 +49,7 @@ See `config.example.toml`. Key fields:
 | `slideshow.interval_seconds` | How long each image shows |
 | `slideshow.stagger_seconds` | Offset between panel flips |
 | `slideshow.rescan_every` | Re-scan a folder after this many flips |
+| `slideshow.avoid_recent` | Don't repeat any of the last N images in a panel |
 | `panels.folders` | Exactly 4 folder paths (TL, TR, BL, BR) |
 
 ## Old Raspberry Pi OS / Raspbian Buster (32-bit, Python 3.7)

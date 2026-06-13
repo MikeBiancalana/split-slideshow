@@ -9,6 +9,7 @@ background = [0, 0, 0]         # letterbox fill color (RGB)
 interval_seconds = 8          # how long each image shows
 stagger_seconds  = 2          # offset between panels so they don't flip in unison
 rescan_every     = 20         # re-scan each folder after this many flips (picks up new files)
+avoid_recent     = 5          # don't repeat any of the last N images shown in a panel
 
 [panels]
 # Exactly 4 folders, one per quadrant: top-left, top-right, bottom-left, bottom-right.
