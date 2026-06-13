@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-import tomllib
+import sys
 from dataclasses import dataclass, field
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # Python 3.7-3.10 (e.g. Raspbian Buster): use the tomli backport
+    import tomli as tomllib
 from pathlib import Path
 
 
