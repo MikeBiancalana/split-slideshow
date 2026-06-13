@@ -20,6 +20,10 @@ dist/
 # Local config (copy from config.example.toml)
 config.toml
 
+# ctags / etags
+tags
+TAGS
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
