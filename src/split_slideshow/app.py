@@ -64,19 +64,24 @@ def run(config: Config) -> None:
         now = pygame.time.get_ticks()
         dirty: list[pygame.Rect] = []
         for i, panel in enumerate(panels):
-            if now >= next_flip[i]:
-                panel.render(screen, panel.pick_next())
-                dirty.append(panel.rect)
-                # Advance from this panel's own deadline so its phase offset is
-                # preserved even if a slow load pushed several deadlines past due.
-                # Anchoring to `now` instead would collapse all panels into sync.
-                next_flip[i] += interval_ms
-                if next_flip[i] <= now:
-                    missed = (now - next_flip[i]) // interval_ms + 1
-                    next_flip[i] += missed * interval_ms
+            if now < next_flip[i]:
+                continue
+            # try_swap is non-blocking: if the worker hasn't finished decoding the
+            # next frame yet, keep showing the current one and retry next tick.
+            if not panel.try_swap(screen):
+                continue
+            dirty.append(panel.rect)
+            # Advance from this panel's own deadline so its phase offset is
+            # preserved across cycles, never collapsing the panels into sync.
+            next_flip[i] += interval_ms
+            if next_flip[i] <= now:
+                missed = (now - next_flip[i]) // interval_ms + 1
+                next_flip[i] += missed * interval_ms
 
         if dirty:
             pygame.display.update(dirty)
         clock.tick(30)
 
+    for panel in panels:
+        panel.stop()
     pygame.quit()

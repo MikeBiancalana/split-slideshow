@@ -1,12 +1,19 @@
-"""A single slideshow panel: scans a folder and draws scaled images into a cell."""
+"""A single slideshow panel: scans a folder and draws scaled images into a cell.
+
+Image decoding happens on a background thread so a slow load (e.g. a large photo
+off a network/CIFS mount) never stalls the main render loop. Each panel keeps one
+decoded-and-scaled frame ready ahead of time; the main loop just blits it.
+"""
 
 from __future__ import annotations
 
+import queue
 import random
+import threading
 from pathlib import Path
 
 import pygame
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
 
@@ -23,11 +30,44 @@ class Panel:
         self.rect = rect
         self.background = background
         self.rescan_every = max(1, rescan_every)
+        # images/last/flips_since_scan are only touched by the worker thread.
         self.images: list[Path] = []
         self.last: Path | None = None
         self.flips_since_scan = 0
         self._font: pygame.font.Font | None = None
+        # One-slot queue: the worker prepares exactly one frame ahead, then blocks
+        # until the main loop consumes it. Items are scaled Surfaces, or None to
+        # signal "no images available".
+        self._queue: queue.Queue = queue.Queue(maxsize=1)
+        self._stop = threading.Event()
         self.scan()
+        self._thread = threading.Thread(
+            target=self._worker, name=f"panel-{folder.name}", daemon=True
+        )
+        self._thread.start()
+
+    # --- worker thread ---------------------------------------------------
+
+    def _worker(self) -> None:
+        while not self._stop.is_set():
+            path = self.pick_next()
+            if path is None:
+                self._put(None)  # tell main loop to show the placeholder
+                self._stop.wait(1.0)  # nothing to show; poll for new files
+                continue
+            surface = self._prepare(path)
+            if surface is None:
+                continue  # bad/garbage file: skip immediately, try another
+            self._put(surface)
+
+    def _put(self, item: pygame.Surface | None) -> None:
+        """Block until the item is queued, but stay responsive to shutdown."""
+        while not self._stop.is_set():
+            try:
+                self._queue.put(item, timeout=0.2)
+                return
+            except queue.Full:
+                continue
 
     def scan(self) -> None:
         """Recursively collect image files under the folder."""
@@ -55,36 +95,55 @@ class Panel:
         self.last = random.choice(choices)
         return self.last
 
-    def render(self, surface: pygame.Surface, image_path: Path | None) -> None:
-        """Fill the cell black (letterbox) and blit the scaled image centered."""
-        surface.fill(self.background, self.rect)
-        if image_path is None:
-            self._render_message(surface, "no images")
-            return
-        # Decode with Pillow (bundles its own JPEG/PNG codecs) rather than relying
-        # on SDL_image, which may be missing on stripped-down/EOL systems. Pillow
-        # also lets us honor EXIF orientation so phone photos aren't sideways.
+    def _prepare(self, path: Path) -> pygame.Surface | None:
+        """Decode and scale an image to fit the cell. Returns None on any error.
+
+        Runs off the main thread, so it must not call Surface.convert() (which
+        needs the display context); the main thread converts implicitly on blit.
+        """
         try:
-            with Image.open(image_path) as im:
+            with Image.open(path) as im:
                 # draft() lets the JPEG decoder downscale while reading, so large
-                # photos (e.g. off a network mount) decode far faster. No-op for
-                # formats that don't support it.
+                # photos decode far faster. No-op for formats that don't support it.
                 im.draft("RGB", (self.rect.width, self.rect.height))
                 im = ImageOps.exif_transpose(im).convert("RGB")
-                img = pygame.image.frombytes(im.tobytes(), im.size, "RGB").convert()
-        except (OSError, ValueError, pygame.error) as e:
-            print(f"[panel] failed to load {image_path}: {e}")
-            self._render_message(surface, "bad image")
-            return
-
+                raw, size = im.tobytes(), im.size
+        except (OSError, ValueError, UnidentifiedImageError) as e:
+            print(f"[panel] skipping unreadable file {path}: {e}")
+            return None
+        try:
+            img = pygame.image.frombytes(raw, size, "RGB")
+        except (pygame.error, ValueError) as e:
+            print(f"[panel] cannot build surface for {path}: {e}")
+            return None
         iw, ih = img.get_size()
         if iw == 0 or ih == 0:
-            return
+            return None
         scale = min(self.rect.width / iw, self.rect.height / ih)
         new_size = (max(1, round(iw * scale)), max(1, round(ih * scale)))
-        scaled = pygame.transform.smoothscale(img, new_size)
-        dest = scaled.get_rect(center=self.rect.center)
-        surface.blit(scaled, dest)
+        return pygame.transform.smoothscale(img, new_size)
+
+    # --- main thread -----------------------------------------------------
+
+    def try_swap(self, surface: pygame.Surface) -> bool:
+        """If a freshly prepared frame is ready, draw it. Non-blocking.
+
+        Returns True if the cell was updated, False if nothing is ready yet
+        (in which case the current image keeps showing).
+        """
+        try:
+            item = self._queue.get_nowait()
+        except queue.Empty:
+            return False
+        surface.fill(self.background, self.rect)  # black letterbox
+        if item is None:
+            self._render_message(surface, "no images")
+        else:
+            surface.blit(item, item.get_rect(center=self.rect.center))
+        return True
+
+    def stop(self) -> None:
+        self._stop.set()
 
     def _render_message(self, surface: pygame.Surface, text: str) -> None:
         # Font rendering needs SDL_ttf; if unavailable, leave the cell black
