@@ -9,6 +9,8 @@ dependencies = [
     "pygame-ce>=2.5; python_version >= '3.9'",
     # Raspbian Buster (Python 3.7): newest cp37 build available on piwheels.
     "pygame-ce==2.3.2; python_version < '3.9'",
+    # Pillow decodes images so we don't depend on system SDL_image at runtime.
+    "pillow",
     # tomllib is stdlib from 3.11; backport for older interpreters.
     "tomli>=1.1.0; python_version < '3.11'",
 ]
@@ -26,6 +28,9 @@ explicit = true
 
 [tool.uv.sources]
 pygame-ce = [
+    { index = "piwheels", marker = "python_version < '3.9'" },
+]
+pillow = [
     { index = "piwheels", marker = "python_version < '3.9'" },
 ]
 

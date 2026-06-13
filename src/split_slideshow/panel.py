@@ -6,6 +6,7 @@ import random
 from pathlib import Path
 
 import pygame
+from PIL import Image, ImageOps
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
 
@@ -60,9 +61,14 @@ class Panel:
         if image_path is None:
             self._render_message(surface, "no images")
             return
+        # Decode with Pillow (bundles its own JPEG/PNG codecs) rather than relying
+        # on SDL_image, which may be missing on stripped-down/EOL systems. Pillow
+        # also lets us honor EXIF orientation so phone photos aren't sideways.
         try:
-            img = pygame.image.load(str(image_path)).convert()
-        except (pygame.error, OSError) as e:
+            with Image.open(image_path) as im:
+                im = ImageOps.exif_transpose(im).convert("RGB")
+                img = pygame.image.frombytes(im.tobytes(), im.size, "RGB").convert()
+        except (OSError, ValueError, pygame.error) as e:
             print(f"[panel] failed to load {image_path}: {e}")
             self._render_message(surface, "bad image")
             return
@@ -77,7 +83,12 @@ class Panel:
         surface.blit(scaled, dest)
 
     def _render_message(self, surface: pygame.Surface, text: str) -> None:
-        if self._font is None:
-            self._font = pygame.font.SysFont(None, 36)
-        label = self._font.render(text, True, (90, 90, 90))
-        surface.blit(label, label.get_rect(center=self.rect.center))
+        # Font rendering needs SDL_ttf; if unavailable, leave the cell black
+        # rather than crashing the whole show.
+        try:
+            if self._font is None:
+                self._font = pygame.font.SysFont(None, 36)
+            label = self._font.render(text, True, (90, 90, 90))
+            surface.blit(label, label.get_rect(center=self.rect.center))
+        except pygame.error as e:
+            print(f"[panel] cannot render text '{text}': {e}")
