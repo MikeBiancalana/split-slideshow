@@ -67,7 +67,13 @@ def run(config: Config) -> None:
             if now >= next_flip[i]:
                 panel.render(screen, panel.pick_next())
                 dirty.append(panel.rect)
-                next_flip[i] = now + interval_ms
+                # Advance from this panel's own deadline so its phase offset is
+                # preserved even if a slow load pushed several deadlines past due.
+                # Anchoring to `now` instead would collapse all panels into sync.
+                next_flip[i] += interval_ms
+                if next_flip[i] <= now:
+                    missed = (now - next_flip[i]) // interval_ms + 1
+                    next_flip[i] += missed * interval_ms
 
         if dirty:
             pygame.display.update(dirty)

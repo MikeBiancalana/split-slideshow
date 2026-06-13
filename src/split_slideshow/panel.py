@@ -66,6 +66,10 @@ class Panel:
         # also lets us honor EXIF orientation so phone photos aren't sideways.
         try:
             with Image.open(image_path) as im:
+                # draft() lets the JPEG decoder downscale while reading, so large
+                # photos (e.g. off a network mount) decode far faster. No-op for
+                # formats that don't support it.
+                im.draft("RGB", (self.rect.width, self.rect.height))
                 im = ImageOps.exif_transpose(im).convert("RGB")
                 img = pygame.image.frombytes(im.tobytes(), im.size, "RGB").convert()
         except (OSError, ValueError, pygame.error) as e:
